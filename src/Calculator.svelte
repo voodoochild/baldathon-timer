@@ -115,10 +115,22 @@
     }
 </script>
 
-<main>
+{#if addedMinutes}
+    <div class="banner">
+        Added <b>{addedMinutes} minutes</b>!
+        {#if updatedTime}
+            Updated time left is <input
+                type="text"
+                bind:value={updatedTime}
+                readonly
+            />.
+        {/if}
+    </div>
+{/if}
+<div class="calculator">
     <form id="form" on:submit|preventDefault={handleSubmit}>
-        <label>
-            Time remaining:
+        <label class="time-remaining">
+            <span>Time remaining:</span>
             <input
                 type="text"
                 bind:value={timeRemaining}
@@ -128,55 +140,145 @@
         <ul class="actions">
             {#each actions as action, i}
                 <li class="action" data-index={i}>
-                    <button type="button" on:click={addPending}>
+                    <div class="label">
                         {action.label}
-                    </button>
+                        {#if action.helpText}
+                            <div class="help-text">{action.helpText}</div>
+                        {/if}
+                    </div>
                     {#if action.minutes}
-                        <input type="number" readonly value={action.minutes} />
+                        <input
+                            type="number"
+                            readonly
+                            value={action.minutes}
+                            size="3"
+                        />
                     {:else}
                         <input type="number" />
                     {/if}
-                    {#if action.helpText}
-                        <span class="help-text">{action.helpText}</span>
-                    {/if}
+                    <button type="button" on:click={addPending}>Add</button>
+                    <!-- <button type="button" disabled>Subtract</button> -->
                 </li>
             {/each}
         </ul>
-        <ul id="pending">
+        <div class="form-controls">
+            <button
+                class="reset"
+                type="button"
+                disabled={pending.length === 0}
+                on:click={handleReset}>Reset</button
+            >
+            <button class="submit" type="submit" disabled={pending.length === 0}
+                >Submit</button
+            >
+        </div>
+        <ul class="pending">
             {#each pending as action, i}
                 <li class="action-pending" data-index={i}>
-                    {action.label} ({action.minutes} mins)
-                    <button
-                        type="button"
+                    <a
+                        class="remove-pending"
+                        href={"#"}
                         on:click={() => {
                             pending = pending.filter((_, j) => j !== i);
                             addedMinutes = null;
                         }}
                     >
-                        🗑️
-                    </button>
+                        &cross;
+                    </a>
+                    {action.label} ({action.minutes} mins)
                 </li>
             {/each}
         </ul>
-        <button
-            type="button"
-            disabled={pending.length === 0}
-            on:click={handleReset}>Reset</button
-        >
-        <button type="submit" disabled={pending.length === 0}>Submit</button>
-        {#if addedMinutes}
-            <div>
-                Adding <b>{addedMinutes} minutes</b> to the clock.
-                {#if updatedTime}
-                    Updated time left is <input
-                        type="text"
-                        bind:value={updatedTime}
-                        readonly
-                    />.
-                {/if}
-            </div>
-        {/if}
     </form>
-</main>
+</div>
 
-<style></style>
+<style>
+    .banner {
+        background: green;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        padding: 30px;
+    }
+
+    input {
+        text-align: center;
+        margin-bottom: 0;
+        border-radius: 8px;
+    }
+
+    input:read-only {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    .time-remaining {
+        text-align: center;
+    }
+
+    .time-remaining span {
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .actions {
+        list-style: none;
+        padding: 0;
+        margin: 40px 0;
+    }
+
+    .action {
+        display: flex;
+        align-items: center;
+    }
+
+    .action + .action {
+        margin-top: 16px;
+    }
+
+    .action .label {
+        font-weight: bold;
+        flex-grow: 1;
+    }
+
+    .help-text {
+        font-style: italic;
+        font-weight: normal;
+        font-size: 14px;
+    }
+
+    .action input[type="number"]:read-only {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    .action button {
+        margin-left: 16px;
+        margin-bottom: 0;
+    }
+
+    .form-controls {
+        text-align: center;
+    }
+
+    .form-controls button + button {
+        margin-left: 8px;
+    }
+
+    .pending {
+        list-style: none;
+        padding: 0;
+    }
+
+    .remove-pending {
+        color: red;
+        margin-right: 16px;
+        cursor: pointer;
+    }
+
+    .remove-pending:hover {
+        text-decoration: none;
+    }
+</style>
