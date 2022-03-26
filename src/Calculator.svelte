@@ -42,11 +42,16 @@
 
     let timeRemaining;
     let updatedTime;
-    let addedMinutes = 0;
-    let pending = [];
+    let timeDelta = null;
+    let pendingAdds = [];
+    let pendingSubtracts = [];
 
-    function addPending(e) {
+    $: submitEnabled = pendingAdds.length || pendingSubtracts.length;
+    $: timesUp = timeRemaining === "00:00:00";
+
+    function handlePending(e) {
         const action = { ...actions[e.target.parentNode.dataset.index] };
+        const type = e.target.dataset.type;
         const input = e.target.parentNode.querySelector("input");
         const minutes = parseInt(input.value, 10);
         const presetMinutes = parseInt(action.minutes, 10);
@@ -54,20 +59,25 @@
         action.minutes = minutes;
 
         if (action.label && action.minutes) {
-            pending = [...pending, action];
+            if (type === "add") {
+                pendingAdds = [...pendingAdds, action];
+            } else if (type === "subtract") {
+                pendingSubtracts = [...pendingSubtracts, action];
+            }
         }
 
         if (minutes !== presetMinutes) {
             input.value = "";
         }
 
-        addedMinutes = null;
+        timeDelta = null;
     }
 
     function handleReset() {
-        pending = [];
+        pendingAdds = [];
+        pendingSubtracts = [];
         timeRemaining = null;
-        addedMinutes = null;
+        timeDelta = null;
         updatedTime = null;
 
         Array.from(
@@ -81,22 +91,33 @@
     const padNumber = (number) => `${number < 10 ? "0" : ""}${number}`;
 
     function handleSubmit() {
-        addedMinutes = pending.reduce(
+        const addTotal = pendingAdds.reduce(
             (prev, action) => prev + action.minutes,
             0
         );
+
+        const subtractTotal = pendingSubtracts.reduce(
+            (prev, action) => prev + action.minutes,
+            0
+        );
+
+        timeDelta = addTotal - subtractTotal;
 
         if (timeRemaining) {
             let [hours, minutes, seconds] = timeRemaining
                 .split(":")
                 .map((segment) => parseInt(segment, 10));
 
-            const totalMinutes = hours * 60 + minutes + addedMinutes;
+            const totalMinutes = hours * 60 + minutes + timeDelta;
+
+            if (totalMinutes <= 0) {
+                timeRemaining = "00:00:00";
+                return;
+            }
+
             hours = parseInt(totalMinutes / 60);
             minutes = totalMinutes % 60;
-            timeRemaining = `${padNumber(hours)}:${padNumber(
-                minutes
-            )}:${padNumber(seconds)}`;
+            timeRemaining = `${padNumber(hours)}:${padNumber(minutes)}:00`;
 
             navigator.permissions
                 .query({ name: "clipboard-write" })
@@ -106,7 +127,7 @@
                         result.state === "prompt"
                     ) {
                         navigator.clipboard.writeText(timeRemaining).then(
-                            () => alert("Updated time copied to clipboard"),
+                            () => console.log("Time copied to clipboard"),
                             () => console.log("Error writing to clipboard")
                         );
                     }
@@ -115,9 +136,17 @@
     }
 </script>
 
-{#if addedMinutes}
-    <div class="banner">
-        Added <b>{addedMinutes} minutes</b>!
+{#if timeDelta !== null}
+    <div class="banner{timesUp ? ' times-up' : ''}">
+        {#if timesUp}
+            Times up!
+        {:else if timeDelta < 0}
+            Subtracted <b>{0 - timeDelta} minutes</b> from the time remaining
+        {:else if timeDelta > 0}
+            Added <b>{timeDelta} minutes</b> to the time remaining
+        {:else}
+            <b>No change</b> (adds and subtracts cancelled out)
+        {/if}
         {#if updatedTime}
             Updated time left is <input
                 type="text"
@@ -156,8 +185,16 @@
                     {:else}
                         <input type="number" />
                     {/if}
-                    <button type="button" on:click={addPending}>Add</button>
-                    <!-- <button type="button" disabled>Subtract</button> -->
+                    <button
+                        data-type="add"
+                        type="button"
+                        on:click={handlePending}>Add</button
+                    >
+                    <button
+                        data-type="subtract"
+                        type="button"
+                        on:click={handlePending}>Subtract</button
+                    >
                 </li>
             {/each}
         </ul>
@@ -165,30 +202,64 @@
             <button
                 class="reset"
                 type="button"
-                disabled={pending.length === 0}
+                disabled={!submitEnabled}
                 on:click={handleReset}>Reset</button
             >
-            <button class="submit" type="submit" disabled={pending.length === 0}
+            <button class="submit" type="submit" disabled={!submitEnabled}
                 >Submit</button
             >
         </div>
-        <ul class="pending">
-            {#each pending as action, i}
-                <li class="action-pending" data-index={i}>
-                    <a
-                        class="remove-pending"
-                        href={"#"}
-                        on:click={() => {
-                            pending = pending.filter((_, j) => j !== i);
-                            addedMinutes = null;
-                        }}
-                    >
-                        &cross;
-                    </a>
-                    {action.label} ({action.minutes} mins)
-                </li>
-            {/each}
-        </ul>
+        <div class="pending">
+            <div>
+                {#if pendingAdds.length}
+                    <h2>Adding</h2>
+                    <ul class="adds">
+                        {#each pendingAdds as action, i}
+                            <li class="action-pending" data-index={i}>
+                                <a
+                                    class="remove-pending"
+                                    href={"#"}
+                                    on:click={() => {
+                                        pendingAdds = pendingAdds.filter(
+                                            (_, j) => j !== i
+                                        );
+                                        timeDelta = null;
+                                    }}
+                                >
+                                    &cross;
+                                </a>
+                                {action.label} ({action.minutes} mins)
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </div>
+            <div>
+                {#if pendingSubtracts.length}
+                    <h2>Subtracting</h2>
+                    <ul class="subtracts">
+                        {#each pendingSubtracts as action, i}
+                            <li class="action-pending" data-index={i}>
+                                <a
+                                    class="remove-pending"
+                                    href={"#"}
+                                    on:click={() => {
+                                        pendingSubtracts =
+                                            pendingSubtracts.filter(
+                                                (_, j) => j !== i
+                                            );
+                                        timeDelta = null;
+                                    }}
+                                >
+                                    &cross;
+                                </a>
+                                {action.label} ({action.minutes} mins)
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </div>
+        </div>
     </form>
 </div>
 
@@ -201,6 +272,10 @@
         right: 0;
         text-align: center;
         padding: 30px;
+    }
+
+    .banner.times-up {
+        background-color: red;
     }
 
     input {
@@ -268,6 +343,11 @@
     }
 
     .pending {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .pending ul {
         list-style: none;
         padding: 0;
     }
